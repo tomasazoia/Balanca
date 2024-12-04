@@ -8,6 +8,9 @@ from hx711 import HX711
 from picamera2 import Picamera2
 from picamera2.encoders import JpegEncoder
 from picamera2.outputs import FileOutput
+import time
+import sys
+import RPi.GPIO as GPIO
 
 # Página HTML com valor dinâmico da balança
 PAGE = """\
