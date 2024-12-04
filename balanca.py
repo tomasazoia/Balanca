@@ -1,138 +1,79 @@
-import io
-import logging
-import socketserver
-from http import server
-from threading import Condition
-import threading
-from hx711 import HX711
-from picamera2 import Picamera2
-from picamera2.encoders import JpegEncoder
-from picamera2.outputs import FileOutput
 import time
 import sys
 import RPi.GPIO as GPIO
+from hx711 import HX711
 
-# Página HTML com valor dinâmico da balança
-PAGE = """\
-<html>
-<head>
-<title>Picamera2 MJPEG Streaming Demo</title>
-</head>
-<body>
-<h1>Picamera2 MJPEG Streaming Demo</h1>
-<p>Valor da Balança: <span id="weight">Carregando...</span> g</p>
-<img src="stream.mjpg" width="640" height="480" />
-<script>
-    // Função para atualizar o valor da balança dinamicamente
-    function updateWeight() {
-        fetch('/weight')
-            .then(response => response.text())
-            .then(data => {
-                document.getElementById('weight').innerText = data;
-            });
-    }
-    setInterval(updateWeight, 1000);  // Atualiza o valor a cada 1 segundo
-</script>
-</body>
-</html>
-"""
+def cleanAndExit():
+    print("Cleaning...")
+        
+    print("Bye!")
+    sys.exit()
 
-# Classe para o output do streaming MJPEG
-class StreamingOutput(io.BufferedIOBase):
-    def __init__(self):
-        self.frame = None
-        self.condition = Condition()
+hx = HX711(5, 6)
 
-    def write(self, buf):
-        with self.condition:
-            self.frame = buf
-            self.condition.notify_all()
+'''
+I've found out that, for some reason, the order of the bytes is not always the same between versions of python,
+and the hx711 itself. I still need to figure out why.
 
-# Classe que vai lidar com as requisições HTTP
-class StreamingHandler(server.BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == '/':
-            self.send_response(301)
-            self.send_header('Location', '/index.html')
-            self.end_headers()
-        elif self.path == '/index.html':
-            content = PAGE.encode('utf-8')
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/html')
-            self.send_header('Content-Length', len(content))
-            self.end_headers()
-            self.wfile.write(content)
-        elif self.path == '/stream.mjpg':
-            self.send_response(200)
-            self.send_header('Age', 0)
-            self.send_header('Cache-Control', 'no-cache, private')
-            self.send_header('Pragma', 'no-cache')
-            self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=FRAME')
-            self.end_headers()
-            try:
-                while True:
-                    with output.condition:
-                        output.condition.wait()
-                        frame = output.frame
-                    self.wfile.write(b'--FRAME\r\n')
-                    self.send_header('Content-Type', 'image/jpeg')
-                    self.send_header('Content-Length', len(frame))
-                    self.end_headers()
-                    self.wfile.write(frame)
-                    self.wfile.write(b'\r\n')
-            except Exception as e:
-                logging.warning(
-                    'Removed streaming client %s: %s',
-                    self.client_address, str(e))
-        elif self.path == '/weight':  # Rota para retornar o valor da balança
-            weight = str(current_weight)
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/plain')
-            self.send_header('Content-Length', len(weight))
-            self.end_headers()
-            self.wfile.write(weight.encode('utf-8'))
-        else:
-            self.send_error(404)
-            self.end_headers()
+If you're experiencing super random values, change these values to MSB or LSB until you get more stable values.
+There is some code below to debug and log the order of the bits and the bytes.
 
-# Classe do servidor HTTP para streaming
-class StreamingServer(socketserver.ThreadingMixIn, server.HTTPServer):
-    allow_reuse_address = True
-    daemon_threads = True
-
-# Configuração da câmera
-picam2 = Picamera2()
-picam2.configure(picam2.create_video_configuration(main={"size": (640, 480)}))
-output = StreamingOutput()
-picam2.start_recording(JpegEncoder(), FileOutput(output))
-
-# Configuração da balança HX711
-hx = HX711(dout_pin=5, pd_sck_pin=6)
+The first parameter is the order in which the bytes are used to build the "long" value. The second paramter is
+the order of the bits inside each byte. According to the HX711 Datasheet, the second parameter is MSB so you
+shouldn't need to modify it.
+'''
 hx.set_reading_format("MSB", "MSB")
-referenceUnit = -23.71  # Ajuste de calibração baseado no peso conhecido
+
+'''
+# HOW TO CALCULATE THE REFFERENCE UNIT
+1. Set the reference unit to 1 and make sure the offset value is set.
+2. Load you sensor with 1kg or with anything you know exactly how much it weights.
+3. Write down the 'long' value you're getting. Make sure you're getting somewhat consistent values.
+    - This values might be in the order of millions, varying by hundreds or thousands and it's ok.
+4. To get the wright in grams, calculate the reference unit using the following formula:
+        
+    referenceUnit = longValueWithOffset / 1000
+        
+In my case, the longValueWithOffset was around 114000 so my reference unit is 114,
+because if I used the 114000, I'd be getting milligrams instead of grams.
+'''
+
+referenceUnit = 114
 hx.set_reference_unit(referenceUnit)
+
 hx.reset()
+
 hx.tare()
 
-# Variável global para armazenar o valor atual da balança
-current_weight = 0.0
+print("Tare done! Add weight now...")
 
-# Função para ler os valores da balança periodicamente
-def read_weight():
-    global current_weight
-    while True:
-        current_weight = hx.get_weight(5)
-        time.sleep(1)
+# to use both channels, you'll need to tare them both
+#hx.tare_A()
+#hx.tare_B()
 
-# Inicia a thread para ler o peso da balança
-weight_thread = threading.Thread(target=read_weight, daemon=True)
-weight_thread.start()
+while True:
+    try:
+        # These three lines are usefull to debug wether to use MSB or LSB in the reading formats
+        # for the first parameter of "hx.set_reading_format("LSB", "MSB")".
+        # Comment the two lines "val = hx.get_weight(5)" and "print val" and uncomment these three lines to see what it prints.
+        
+        # np_arr8_string = hx.get_np_arr8_string()
+        # binary_string = hx.get_binary_string()
+        # print binary_string + " " + np_arr8_string
+        
+        # Prints the weight. Comment if you're debbuging the MSB and LSB issue.
+        val = hx.get_weight(5)
+        print(val)
 
-# Inicia o servidor HTTP
-try:
-    address = ('', 7123)
-    server = StreamingServer(address, StreamingHandler)
-    print("Servidor iniciado na porta 7123")
-    server.serve_forever()
-finally:
-    picam2.stop_recording()
+        # To get weight from both channels (if you have load cells hooked up 
+        # to both channel A and B), do something like this
+        #val_A = hx.get_weight_A(5)
+        #val_B = hx.get_weight_B(5)
+        #print "A: %s  B: %s" % ( val_A, val_B )
+
+        hx.power_down()
+        hx.power_up()
+        time.sleep(0.1)
+
+    except (KeyboardInterrupt, SystemExit):
+        cleanAndExit()
