@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera App</title>
+    <!-- Bootstrap CSS CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa; /* Light gray background */
+        }
+        h1 {
+            color: #343a40; /* Dark gray for header */
+        }
+        .container {
+            margin-top: 50px;
+            text-align: center;
+        }
+        .btn-analyze {
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            font-size: 16px;
+            padding: 10px 20px;
+            margin-top: 20px;
+        }
+        .btn-analyze:hover {
+            background-color: #0056b3;
+        }
+        .btn-tare {
+            background-color: #28a745;
+            color: #fff;
+            border: none;
+            font-size: 16px;
+            padding: 10px 20px;
+            margin-top: 20px;
+        }
+        .btn-tare:hover {
+            background-color: #218838;
+        }
+        #results {
+            margin-top: 20px;
+            font-weight: bold;
+            color: #343a40;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📷 Camera em tempo real</h1>
+        <div class="card mx-auto" style="max-width: 700px;">
+            <div class="card-body">
+                <!-- Video Feed -->
+                <img src="{{ url_for('video_feed') }}" id="video" class="img-fluid" alt="Camera Feed">
+            </div>
+        </div>
+        <button id="analyzeButton" class="btn btn-analyze">Analyze Frame</button>
+        <button id="weightButton" class="btn btn-primary mt-3">Get Weight</button>
+        <button id="tareButton" class="btn btn-tare mt-3">Tare</button>
+        <p id="results"></p>
+        <p id="weight"></p>
+        <p id="tareStatus"></p>
+    </div>
+
+    <!-- Bootstrap Bundle JS CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.getElementById("analyzeButton").addEventListener("click", async () => {
+            const response = await fetch('/analyze', { method: 'POST' });
+            const data = await response.json();
+            document.getElementById("results").textContent = `Detected Classes: ${JSON.stringify(data.detected_classes)}`;
+        });
+
+        document.getElementById("weightButton").addEventListener("click", async () => {
+            const response = await fetch('/weight');
+            const data = await response.json();
+            document.getElementById("weight").textContent = `Weight: ${data.weight} grams`;
+        });
+
+        document.getElementById("tareButton").addEventListener("click", async () => {
+            const response = await fetch('/tara', { method: 'POST' });
+            const data = await response.json();
+            document.getElementById("tareStatus").textContent = data.status;
+        });
+    </script>
+</body>
+</html>
