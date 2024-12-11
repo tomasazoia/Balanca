@@ -8,7 +8,7 @@ import requests
 app = Flask(__name__)
 
 # URL do feed MJPEG (pode ser alterado conforme o IP do Raspberry Pi)
-camera_url = 'http://192.168.23.112:7123/stream.mjpg'
+camera_url = 'http://192.168.214.112:7123/stream.mjpg'
 model = YOLO('best.pt')  # Modelo treinado
 
 # Dicionário de nomes de classes
@@ -64,10 +64,10 @@ def analyze():
 
     return jsonify(detected_classes)
 
-@app.route('/weight')
+@app.route('/peso')
 def weight():
     """Obtém o peso da balança do Raspberry Pi."""
-    raspberry_pi_ip = '192.168.23.112'
+    raspberry_pi_ip = '192.168.214.112'
     url = f'http://{raspberry_pi_ip}:5001/peso'
     response = requests.get(url)
     if response.status_code == 200:
